@@ -9,5 +9,3 @@ router.post("/", auth, sendMessage);
 router.get("/:id", auth, getMessages);
 
 module.exports = router;
-
-module.exports = router;

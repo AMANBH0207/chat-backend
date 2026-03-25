@@ -51,6 +51,8 @@ exports.loginUser = async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
+        avatarPromptAccepted: user.avatarPromptAccepted,
+        avatarUrl: user.avatarUrl
       },
     });
   } catch (error) {
@@ -89,6 +91,8 @@ exports.registerUser = async (req, res) => {
       name,
       email,
       password: hashedPassword,
+      avatarPromptAccepted: false,
+      avatarUrl:"https://res.cloudinary.com/dhdciqj7q/image/upload/v1774436668/Avatar_placmt.png"
     });
 
     res.status(201).json({
