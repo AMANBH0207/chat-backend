@@ -12,8 +12,8 @@ exports.searchUsers = async (req, res, next) => {
       : {};
     const users = await User.find(keyword)
     //   .find({ _id: { $ne: req.user.id } })
-      .select("-password") // security
-      .limit(10); // optional limit
+      .select("-password")
+      .limit(10);
 
     res.status(200).json({
       success: true,

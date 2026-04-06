@@ -1,24 +1,64 @@
 const messageService = require("../services/messageService");
 
-exports.sendMessage = async (req, res, next) => {
+const Message = require("../models/Message");
+const Room = require("../models/Rooms");
+
+exports.sendMessage = async (req, res) => {
   try {
-    const messageData = {
-      ...req.body,
-      sender: req.user.id,
-    };
+    const { roomId, text } = req.body;
+    const senderId = req.user.id;
 
-    const message = await messageService.createMessage(messageData);
+    if (!roomId || !text) {
+      return res.status(400).json({
+        success: false,
+        message: "roomId and text required",
+      });
+    }
 
-    res.json({ success: true, data: message });
+    const message = await Message.create({
+      roomId,
+      senderId,
+      text,
+    });
+
+    await Room.findByIdAndUpdate(roomId, {
+      updatedAt: new Date(),
+    });
+
+    res.json({
+      success: true,
+      data: message,
+    });
   } catch (err) {
-    next(err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
-exports.getMessages = async (req, res, next) => {
+exports.getMessages = async (req, res) => {
   try {
-    const messages = await messageService.getMessages(req.params.id);
-    res.json({ success: true, data: messages });
+    const { roomId } = req.params;
+
+    if (!roomId) {
+      return res.status(400).json({
+        success: false,
+        message: "roomId required",
+      });
+    }
+
+    const messages = await Message.find({ roomId })
+      .populate("senderId", "name email avatarUrl")
+      .sort({ createdAt: 1 });
+
+    res.json({
+      success: true,
+      data: messages,
+    });
   } catch (err) {
-    next(err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };

@@ -5,7 +5,7 @@ const {
 } = require("../controllers/messageController");
 const auth = require("../middleware/authMiddleware");
 
-router.post("/", auth, sendMessage);
-router.get("/:id", auth, getMessages);
+router.post("/send", auth, sendMessage);
+router.get("/:roomId", auth, getMessages);
 
 module.exports = router;
