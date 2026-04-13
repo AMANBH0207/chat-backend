@@ -12,6 +12,8 @@ const io = new Server(server, {
   cors: { origin: "*" },
 });
 
+app.set("io", io);
+
 require("./sockets/chatSocket")(io);
 
 server.listen(PORT, () => {
