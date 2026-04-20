@@ -38,11 +38,11 @@ exports.loginUser = async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    res.cookie("token", token, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: false,
-    });
+   res.cookie("token", token, {
+  httpOnly: true,
+  sameSite: "none",
+  secure: true,
+});
 
     res.status(200).json({
       success: true,
