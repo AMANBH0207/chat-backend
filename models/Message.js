@@ -24,6 +24,10 @@ const messageSchema = new mongoose.Schema(
     fileName: {
       type: String,
     },
+    isReadByUser: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
