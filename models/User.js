@@ -5,7 +5,16 @@ const userSchema = new mongoose.Schema({
   email: String,
   password: String,
   avatarPromptAccepted: Boolean,
-  avatarUrl:String
+  avatarUrl:String,
+  pushSubscriptions: [
+    {
+      endpoint: String,
+      keys: {
+        p256dh: String,
+        auth: String,
+      },
+    },
+  ],
 }, { timestamps: true });
 
 module.exports = mongoose.model("User", userSchema, "users");

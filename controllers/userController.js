@@ -23,3 +23,48 @@ exports.searchUsers = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.subscribeToPush = async (req, res, next) => {
+  try {
+    const subscription = req.body;
+    const userId = req.user.id;
+
+    if (!subscription || !subscription.endpoint) {
+      return res.status(400).json({ success: false, message: "Invalid subscription object" });
+    }
+
+    await User.updateOne(
+      { _id: userId },
+      { $pull: { pushSubscriptions: { endpoint: subscription.endpoint } } }
+    );
+
+    await User.updateOne(
+      { _id: userId },
+      { $push: { pushSubscriptions: subscription } }
+    );
+
+    res.status(201).json({ success: true, message: "Subscribed to push notifications" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.unsubscribeFromPush = async (req, res, next) => {
+  try {
+    const { endpoint } = req.body;
+    const userId = req.user.id;
+
+    if (!endpoint) {
+      return res.status(400).json({ success: false, message: "Endpoint is required" });
+    }
+
+    await User.updateOne(
+      { _id: userId },
+      { $pull: { pushSubscriptions: { endpoint } } }
+    );
+
+    res.status(200).json({ success: true, message: "Unsubscribed from push notifications" });
+  } catch (err) {
+    next(err);
+  }
+};

@@ -2,6 +2,7 @@ const Message = require("../models/Message");
 const Room = require("../models/Rooms");
 const cloudinary = require("../config/cloudinary");
 const streamifier = require("streamifier");
+const pushService = require("../services/pushService");
 
 exports.sendMessage = async (req, res) => {
   try {
@@ -76,11 +77,31 @@ exports.sendMessage = async (req, res) => {
       "name email avatarUrl"
     );
 
-    await Room.findByIdAndUpdate(roomId, {
+    const room = await Room.findByIdAndUpdate(roomId, {
       updatedAt: new Date(),
     });
+    
     const io = req.app.get("io");
     io.to(roomId).emit("receive_message", populatedMessage);
+
+    // Push notification logic
+    if (room) {
+      const socketsInRoom = await io.in(roomId).fetchSockets();
+      const otherUserViewing = socketsInRoom.some(
+        (s) => s.userId?.toString() !== senderId.toString() && s.currentRoom === roomId
+      );
+
+      if (!otherUserViewing) {
+        const receivers = room.members.filter(m => m.toString() !== senderId.toString());
+        for (const receiverId of receivers) {
+          pushService.sendNotificationToUser(receiverId, {
+            title: `New message from ${populatedMessage.senderId.name}`,
+            body: text || (fileUrl ? "Sent a file" : "New message"),
+            data: { roomId, url: `/chat/${roomId}` }
+          });
+        }
+      }
+    }
 
     res.json({
       success: true,

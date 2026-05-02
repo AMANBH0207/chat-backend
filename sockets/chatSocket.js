@@ -1,4 +1,6 @@
 const Message = require("../models/Message");
+const Room = require("../models/Rooms");
+const pushService = require("../services/pushService");
 
 module.exports = (io) => {
   io.on("connection", (socket) => {
@@ -68,9 +70,23 @@ module.exports = (io) => {
             isReadByUser: true,
           });
 
-          socket.to(roomId).emit("messages_read", {
+          // Emit to io so that the sender (who needs the read receipt) receives it
+          io.to(roomId).emit("messages_read", {
             roomId,
           });
+        } else {
+          // Send push notification
+          const room = await Room.findById(roomId);
+          if (room) {
+            const receivers = room.members.filter(m => m.toString() !== senderId.toString());
+            for (const receiverId of receivers) {
+              pushService.sendNotificationToUser(receiverId, {
+                title: `New message from ${populatedMessage.senderId.name}`,
+                body: text,
+                data: { roomId, url: `/chat/${roomId}` }
+              });
+            }
+          }
         }
       } catch (err) {
         console.error("Socket Error:", err);
