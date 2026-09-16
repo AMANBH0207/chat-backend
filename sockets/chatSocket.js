@@ -22,9 +22,10 @@ module.exports = (io) => {
      */
     socket.on("send_message", async (data) => {
       try {
-        const { roomId, text, senderId } = data;
+        const { roomId, text, senderId, fileType, fileUrl, fileName } = data;
 
-        if (!roomId || !text || !senderId) return;
+        // Text OR file required
+        if (!roomId || !senderId || (!text && !fileUrl)) return;
 
         const message = await Message.create({
           roomId,
@@ -46,11 +47,14 @@ module.exports = (io) => {
         /**
          * Sidebar latest message
          */
-        io.to(roomId).emit("sidebar_last_message", {
+        io.emit("sidebar_last_message", {
           roomId,
           lastMessage: text,
           createdAt: populatedMessage.createdAt,
           senderId,
+          fileUrl,
+          fileName,
+          fileType
         });
 
         /**
