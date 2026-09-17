@@ -13,6 +13,9 @@ module.exports = (io) => {
     socket.on("join_room", ({ roomId, userId }) => {
       socket.join(roomId);
 
+      // Private room for this user
+      socket.join(`user_${userId}`);
+
       socket.currentRoom = roomId;
       socket.userId = userId;
     });
@@ -22,7 +25,14 @@ module.exports = (io) => {
      */
     socket.on("send_message", async (data) => {
       try {
-        const { roomId, text, senderId, fileType, fileUrl, fileName } = data;
+        const {
+          roomId,
+          text,
+          senderId,
+          fileType,
+          fileUrl,
+          fileName,
+        } = data;
 
         // Text OR file required
         if (!roomId || !senderId || (!text && !fileUrl)) return;
@@ -42,7 +52,10 @@ module.exports = (io) => {
         /**
          * Chat area messages
          */
-        io.to(roomId).emit("receive_message", populatedMessage);
+        io.to(roomId).emit(
+          "receive_message",
+          populatedMessage
+        );
 
         /**
          * Sidebar latest message
@@ -54,14 +67,14 @@ module.exports = (io) => {
           senderId,
           fileUrl,
           fileName,
-          fileType
+          fileType,
         });
 
         /**
          * AUTO READ RECEIPT
-         * if receiver already viewing this room
          */
-        const socketsInRoom = await io.in(roomId).fetchSockets();
+        const socketsInRoom =
+          await io.in(roomId).fetchSockets();
 
         const otherUserViewing = socketsInRoom.some(
           (s) =>
@@ -74,21 +87,31 @@ module.exports = (io) => {
             isReadByUser: true,
           });
 
-          // Emit to io so that the sender (who needs the read receipt) receives it
           io.to(roomId).emit("messages_read", {
             roomId,
           });
         } else {
           // Send push notification
           const room = await Room.findById(roomId);
+
           if (room) {
-            const receivers = room.members.filter(m => m.toString() !== senderId.toString());
+            const receivers = room.members.filter(
+              (m) =>
+                m.toString() !== senderId.toString()
+            );
+
             for (const receiverId of receivers) {
-              pushService.sendNotificationToUser(receiverId, {
-                title: `New message from ${populatedMessage.senderId.name}`,
-                body: text,
-                data: { roomId, url: `/chat/${roomId}` }
-              });
+              pushService.sendNotificationToUser(
+                receiverId,
+                {
+                  title: `New message from ${populatedMessage.senderId.name}`,
+                  body: text,
+                  data: {
+                    roomId,
+                    url: `/chat/${roomId}`,
+                  },
+                }
+              );
             }
           }
         }
@@ -100,62 +123,300 @@ module.exports = (io) => {
     /**
      * TYPING START
      */
-    socket.on("typing_start", ({ roomId, userId }) => {
-      socket.to(roomId).emit("user_typing", {
-        roomId,
-        userId,
-      });
-    });
+    socket.on(
+      "typing_start",
+      ({ roomId, userId }) => {
+        socket.to(roomId).emit(
+          "user_typing",
+          {
+            roomId,
+            userId,
+          }
+        );
+      }
+    );
 
     /**
      * TYPING STOP
      */
-    socket.on("typing_stop", ({ roomId, userId }) => {
-      socket.to(roomId).emit("user_stop_typing", {
-        roomId,
-        userId,
-      });
-    });
+    socket.on(
+      "typing_stop",
+      ({ roomId, userId }) => {
+        socket.to(roomId).emit(
+          "user_stop_typing",
+          {
+            roomId,
+            userId,
+          }
+        );
+      }
+    );
 
     /**
      * READ RECEIPT
-     * when user manually opens room later
      */
-    socket.on("mark_as_read", async ({ roomId, userId }) => {
-      try {
-        const result = await Message.updateMany(
-          {
-            roomId,
-            senderId: { $ne: userId },
-            isReadByUser: false,
-          },
-          {
-            $set: { isReadByUser: true },
+    socket.on(
+      "mark_as_read",
+      async ({ roomId, userId }) => {
+        try {
+          const result =
+            await Message.updateMany(
+              {
+                roomId,
+                senderId: { $ne: userId },
+                isReadByUser: false,
+              },
+              {
+                $set: {
+                  isReadByUser: true,
+                },
+              }
+            );
+
+          if (result.modifiedCount > 0) {
+            socket
+              .to(roomId)
+              .emit("messages_read", {
+                roomId,
+              });
           }
+        } catch (error) {
+          console.error(
+            "Read receipt error:",
+            error
+          );
+        }
+      }
+    );
+
+    /**
+     * =====================================================
+     * AUDIO / VIDEO CALL SIGNALING
+     * =====================================================
+     */
+
+    /**
+     * CALL USER
+     *
+     * Caller -> Receiver
+     */
+    socket.on(
+      "call_user",
+      ({
+        roomId,
+        callerId,
+        receiverId,
+        callType,
+      }) => {
+        console.log(
+          `Call ${callType}:`,
+          callerId,
+          "->",
+          receiverId
         );
 
-        if (result.modifiedCount > 0) {
-          socket.to(roomId).emit("messages_read", {
+        io.to(`user_${receiverId}`).emit(
+          "incoming_call",
+          {
             roomId,
-          });
-        }
-      } catch (error) {
-        console.error("Read receipt error:", error);
+            callerId,
+            receiverId,
+            callType,
+          }
+        );
       }
-    });
+    );
+
+    /**
+     * ACCEPT CALL
+     *
+     * Receiver -> Caller
+     */
+    socket.on(
+      "accept_call",
+      ({
+        roomId,
+        callerId,
+        receiverId,
+      }) => {
+        console.log(
+          "Call accepted:",
+          callerId,
+          "<-",
+          receiverId
+        );
+
+        io.to(`user_${callerId}`).emit(
+          "call_accepted",
+          {
+            roomId,
+            callerId,
+            receiverId,
+          }
+        );
+      }
+    );
+
+    /**
+     * REJECT CALL
+     *
+     * Receiver -> Caller
+     */
+    socket.on(
+      "reject_call",
+      ({
+        roomId,
+        callerId,
+        receiverId,
+      }) => {
+        console.log(
+          "Call rejected:",
+          callerId,
+          "<-",
+          receiverId
+        );
+
+        io.to(`user_${callerId}`).emit(
+          "call_rejected",
+          {
+            roomId,
+            callerId,
+            receiverId,
+          }
+        );
+      }
+    );
+
+    /**
+     * =====================================================
+     * WEBRTC OFFER
+     * =====================================================
+     *
+     * Caller -> Receiver
+     */
+    socket.on(
+      "webrtc_offer",
+      ({
+        roomId,
+        offer,
+        receiverId,
+      }) => {
+        console.log(
+          "WebRTC offer:",
+          receiverId
+        );
+
+        io.to(`user_${receiverId}`).emit(
+          "webrtc_offer",
+          {
+            roomId,
+            offer,
+          }
+        );
+      }
+    );
+
+    /**
+     * =====================================================
+     * WEBRTC ANSWER
+     * =====================================================
+     *
+     * Receiver -> Caller
+     */
+    socket.on(
+      "webrtc_answer",
+      ({
+        roomId,
+        answer,
+        callerId,
+      }) => {
+        console.log(
+          "WebRTC answer:",
+          callerId
+        );
+
+        io.to(`user_${callerId}`).emit(
+          "webrtc_answer",
+          {
+            roomId,
+            answer,
+          }
+        );
+      }
+    );
+
+    /**
+     * =====================================================
+     * ICE CANDIDATE
+     * =====================================================
+     */
+    socket.on(
+      "ice_candidate",
+      ({
+        roomId,
+        candidate,
+        targetUserId,
+      }) => {
+        console.log(
+          "ICE candidate ->",
+          targetUserId
+        );
+
+        io.to(`user_${targetUserId}`).emit(
+          "ice_candidate",
+          {
+            roomId,
+            candidate,
+          }
+        );
+      }
+    );
+
+    /**
+     * =====================================================
+     * END CALL
+     * =====================================================
+     */
+    socket.on(
+      "end_call",
+      ({
+        roomId,
+        targetUserId,
+      }) => {
+        console.log(
+          "Call ended:",
+          roomId
+        );
+
+        io.to(`user_${targetUserId}`).emit(
+          "call_ended",
+          {
+            roomId,
+          }
+        );
+      }
+    );
 
     /**
      * SIDEBAR REFRESH
      */
-    socket.on("refresh_sidebar", ({ roomId }) => {
-      io.emit("sidebar_refresh", { roomId });
-    });
+    socket.on(
+      "refresh_sidebar",
+      ({ roomId }) => {
+        io.emit("sidebar_refresh", {
+          roomId,
+        });
+      }
+    );
 
     /**
      * DISCONNECT
      */
     socket.on("disconnect", () => {
-      console.log("User disconnected:", socket.id);
+      console.log(
+        "User disconnected:",
+        socket.id
+      );
     });
   });
 };
